@@ -4,36 +4,33 @@ const userSchema = require("../validators/userValidator");
 
 const createUser = async (req, res) => {
     try {
-        // Validating request body
-        const { error } = userSchema.validateAsync(req.body);
-        if (error) return res.status(400).json({ message: error.details[0].message.replace(/"/g, '') });
+        await userSchema.validateAsync(req.body, { abortEarly: false });
 
         const { slot_id, first_name, last_name, phone } = req.body;
 
+        // Checking if a user already booked this slot
         const existingUser = await User.findOne({ slot_id });
 
         if (existingUser) {
-            // Update the user
-            await User.updateOne(
-                { slot_id },
-                { $set: { first_name, last_name, phone } }
-            );
-
+            await User.updateOne({ slot_id }, { $set: { first_name, last_name, phone } });
             return res.status(200).json({ message: "User updated successfully!" });
         } else {
-            // Creating a new user
             const newUser = new User(req.body);
             await newUser.save();
 
-            // Marking the slot as booked
+            // Marking slot as booked
             await Slot.updateOne({ _id: slot_id }, { $set: { is_booked: 1 } });
 
             return res.status(201).json({ message: "Slot booked successfully!", user: newUser });
         }
     } catch (err) {
-        console.error(err);
+        if (err.isJoi) {
+            return res.status(400).json({ message: err.details[0].message.replace(/"/g, '') });
+        }
+
         res.status(500).json({ message: "Internal Server Error" });
     }
 };
+
 
 module.exports = { createUser };
